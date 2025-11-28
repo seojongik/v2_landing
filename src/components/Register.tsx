@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, User, Lock, Eye, EyeOff, Phone, MapPin, Building2, CheckCircle2, UserCheck, X, ArrowLeftRight } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { getData, addData, updateData } from '../lib/supabase';
 
 interface RegisterProps {
   onBack: () => void;
@@ -81,26 +82,12 @@ export function Register({ onBack, onLoginClick }: RegisterProps) {
     setBizNoCheckStatus('checking');
 
     try {
-      const apiUrl = import.meta.env.DEV
-        ? '/dynamic_api.php'
-        : 'https://autofms.mycafe24.com/dynamic_api.php';
-
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          operation: 'get',
-          table: 'v2_branch',
-          where: [{ field: 'branch_business_reg_no', operator: '=', value: branchBusinessRegNo }],
-        }),
+      const result = await getData({
+        table: 'v2_branch',
+        where: [{ field: 'branch_business_reg_no', operator: '=', value: branchBusinessRegNo }],
       });
 
-      const data = await response.json();
-
-      if (data.success && data.data?.length > 0) {
+      if (result.success && result.data && result.data.length > 0) {
         setBizNoCheckStatus('unavailable');
         alert('이미 등록된 사업자등록번호입니다.');
       } else {
@@ -124,42 +111,19 @@ export function Register({ onBack, onLoginClick }: RegisterProps) {
     setIdCheckStatus('checking');
 
     try {
-      const apiUrl = import.meta.env.DEV
-        ? '/dynamic_api.php'
-        : 'https://autofms.mycafe24.com/dynamic_api.php';
-
       // Pro와 Manager 테이블 모두 확인
-      const proResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          operation: 'get',
-          table: 'v2_staff_pro',
-          where: [{ field: 'staff_access_id', operator: '=', value: loginId }],
-        }),
+      const proResult = await getData({
+        table: 'v2_staff_pro',
+        where: [{ field: 'staff_access_id', operator: '=', value: loginId }],
       });
 
-      const managerResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          operation: 'get',
-          table: 'v2_staff_manager',
-          where: [{ field: 'staff_access_id', operator: '=', value: loginId }],
-        }),
+      const managerResult = await getData({
+        table: 'v2_staff_manager',
+        where: [{ field: 'staff_access_id', operator: '=', value: loginId }],
       });
 
-      const proData = await proResponse.json();
-      const managerData = await managerResponse.json();
-
-      if ((proData.success && proData.data?.length > 0) ||
-          (managerData.success && managerData.data?.length > 0)) {
+      if ((proResult.success && proResult.data && proResult.data.length > 0) ||
+          (managerResult.success && managerResult.data && managerResult.data.length > 0)) {
         setIdCheckStatus('unavailable');
         alert('이미 사용 중인 아이디입니다.');
       } else {
@@ -267,10 +231,6 @@ export function Register({ onBack, onLoginClick }: RegisterProps) {
     setIsLoading(true);
 
     try {
-      const apiUrl = import.meta.env.DEV
-        ? '/dynamic_api.php'
-        : 'https://autofms.mycafe24.com/dynamic_api.php';
-
       console.log('🏢 지점 등록 시작');
 
       // branch_id 생성 (타임스탬프 기반 유니크 ID)
@@ -300,27 +260,10 @@ export function Register({ onBack, onLoginClick }: RegisterProps) {
 
       console.log('📤 전송할 지점 데이터:', branchData);
 
-      const branchResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          operation: 'add',
-          table: 'v2_branch',
-          data: branchData,
-        }),
+      const branchResult = await addData({
+        table: 'v2_branch',
+        data: branchData,
       });
-
-      if (!branchResponse.ok) {
-        const errorText = await branchResponse.text();
-        console.error('❌ HTTP 에러:', branchResponse.status, errorText);
-        throw new Error(`지점 등록 API 호출 실패 (${branchResponse.status}): ${errorText}`);
-      }
-
-      const branchResult = await branchResponse.json();
-      console.log('✅ 지점 등록 결과:', branchResult);
 
       if (!branchResult.success) {
         console.error('❌ 지점 등록 실패:', branchResult);
@@ -332,22 +275,13 @@ export function Register({ onBack, onLoginClick }: RegisterProps) {
       // 2-1단계: 가장 큰 manager_id 조회 (새 관리자 ID 생성)
       console.log('🔍 최대 manager_id 조회 중...');
 
-      const maxIdResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          operation: 'get',
-          table: 'v2_staff_manager',
-          fields: ['manager_id'],
-          order: { field: 'manager_id', direction: 'DESC' },
-          limit: 1,
-        }),
+      const maxIdResult = await getData({
+        table: 'v2_staff_manager',
+        fields: ['manager_id'],
+        order: { field: 'manager_id', direction: 'DESC' },
+        limit: 1,
       });
 
-      const maxIdResult = await maxIdResponse.json();
       let nextManagerId = 1; // 기본값
 
       if (maxIdResult.success && maxIdResult.data && maxIdResult.data.length > 0) {
@@ -400,27 +334,10 @@ export function Register({ onBack, onLoginClick }: RegisterProps) {
 
       console.log('👤 관리자 계정 등록 시작, Manager ID:', nextManagerId);
 
-      const managerResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          operation: 'add',
-          table: 'v2_staff_manager',
-          data: managerData,
-        }),
+      const managerResult = await addData({
+        table: 'v2_staff_manager',
+        data: managerData,
       });
-
-      if (!managerResponse.ok) {
-        const errorText = await managerResponse.text();
-        console.error('❌ 관리자 등록 HTTP 에러:', managerResponse.status, errorText);
-        throw new Error(`관리자 계정 등록 API 호출 실패 (${managerResponse.status}): ${errorText}`);
-      }
-
-      const managerResult = await managerResponse.json();
-      console.log('✅ 관리자 계정 등록 결과:', managerResult);
 
       if (!managerResult.success) {
         console.error('❌ 관리자 계정 등록 실패:', managerResult);
@@ -456,20 +373,11 @@ export function Register({ onBack, onLoginClick }: RegisterProps) {
 
       console.log('🔐 관리자 권한 설정 시작');
 
-      const accessSettingResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify({
-          operation: 'add',
-          table: 'v2_staff_access_setting',
-          data: accessSettingData,
-        }),
+      const accessSettingResult = await addData({
+        table: 'v2_staff_access_setting',
+        data: accessSettingData,
       });
 
-      const accessSettingResult = await accessSettingResponse.json();
       if (accessSettingResult.success) {
         console.log('✅ 관리자 권한 설정 완료');
       } else {
@@ -480,21 +388,12 @@ export function Register({ onBack, onLoginClick }: RegisterProps) {
       if (managerId) {
         console.log('🔄 지점의 branch_manager_id 업데이트 시작, Manager ID:', managerId);
 
-        const updateResponse = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify({
-            operation: 'update',
-            table: 'v2_branch',
-            data: { branch_manager_id: managerId },
-            where: [{ field: 'branch_id', operator: '=', value: branchId }],
-          }),
+        const updateResult = await updateData({
+          table: 'v2_branch',
+          data: { branch_manager_id: managerId },
+          where: [{ field: 'branch_id', operator: '=', value: branchId }],
         });
 
-        const updateResult = await updateResponse.json();
         if (updateResult.success) {
           console.log('✅ branch_manager_id 업데이트 완료');
         }

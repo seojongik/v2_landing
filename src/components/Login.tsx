@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, User, Lock, Eye, EyeOff, ArrowLeftRight } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { getData } from '../lib/supabase';
 
 interface LoginProps {
   onBack: () => void;
@@ -20,94 +21,46 @@ export function Login({ onBack, onRegisterClick }: LoginProps) {
     setIsLoading(true);
 
     try {
-      const apiUrl = import.meta.env.DEV
-        ? '/dynamic_api.php'
-        : 'https://autofms.mycafe24.com/dynamic_api.php';
-
       console.log('🔐 로그인 시도:', loginId);
 
       // 1단계: v2_staff_pro 테이블 조회
-      const proRequestData = {
-        operation: 'get',
+      const proResult = await getData({
         table: 'v2_staff_pro',
         where: [
-          {
-            field: 'staff_access_id',
-            operator: '=',
-            value: loginId,
-          },
-          {
-            field: 'staff_status',
-            operator: '=',
-            value: '재직',
-          },
+          { field: 'staff_access_id', operator: '=', value: loginId },
+          { field: 'staff_status', operator: '=', value: '재직' },
         ],
-      };
-
-      const proResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(proRequestData),
       });
 
-      if (proResponse.ok) {
-        const proData = await proResponse.json();
-
-        if (proData.success && proData.data && proData.data.length > 0) {
-          // Pro 테이블에서 비밀번호 확인
-          for (const userData of proData.data) {
-            if (userData.staff_access_password === password) {
-              userData.role = 'pro';
-              console.log('✅ Pro로 로그인 성공');
-              await handleLoginSuccess(userData);
-              return;
-            }
+      if (proResult.success && proResult.data && proResult.data.length > 0) {
+        // Pro 테이블에서 비밀번호 확인
+        for (const userData of proResult.data) {
+          if (userData.staff_access_password === password) {
+            userData.role = 'pro';
+            console.log('✅ Pro로 로그인 성공');
+            await handleLoginSuccess(userData);
+            return;
           }
         }
       }
 
       // 2단계: v2_staff_manager 테이블 조회
-      const managerRequestData = {
-        operation: 'get',
+      const managerResult = await getData({
         table: 'v2_staff_manager',
         where: [
-          {
-            field: 'staff_access_id',
-            operator: '=',
-            value: loginId,
-          },
-          {
-            field: 'staff_status',
-            operator: '=',
-            value: '재직',
-          },
+          { field: 'staff_access_id', operator: '=', value: loginId },
+          { field: 'staff_status', operator: '=', value: '재직' },
         ],
-      };
-
-      const managerResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(managerRequestData),
       });
 
-      if (managerResponse.ok) {
-        const managerData = await managerResponse.json();
-
-        if (managerData.success && managerData.data && managerData.data.length > 0) {
-          // Manager 테이블에서 비밀번호 확인
-          for (const userData of managerData.data) {
-            if (userData.staff_access_password === password) {
-              userData.role = 'manager';
-              console.log('✅ Manager로 로그인 성공');
-              await handleLoginSuccess(userData);
-              return;
-            }
+      if (managerResult.success && managerResult.data && managerResult.data.length > 0) {
+        // Manager 테이블에서 비밀번호 확인
+        for (const userData of managerResult.data) {
+          if (userData.staff_access_password === password) {
+            userData.role = 'manager';
+            console.log('✅ Manager로 로그인 성공');
+            await handleLoginSuccess(userData);
+            return;
           }
         }
       }
@@ -132,55 +85,31 @@ export function Login({ onBack, onRegisterClick }: LoginProps) {
       return;
     }
 
-    const apiUrl = import.meta.env.DEV
-      ? '/dynamic_api.php'
-      : 'https://autofms.mycafe24.com/dynamic_api.php';
-
-    const branchRequestData = {
-      operation: 'get',
-      table: 'v2_branch',
-      where: [
-        {
-          field: 'branch_id',
-          operator: '=',
-          value: branchId,
-        }
-      ],
-    };
-
     try {
-      const branchResponse = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(branchRequestData),
+      const branchResult = await getData({
+        table: 'v2_branch',
+        where: [{ field: 'branch_id', operator: '=', value: branchId }],
       });
 
-      if (branchResponse.ok) {
-        const branchData = await branchResponse.json();
+      if (branchResult.success && branchResult.data && branchResult.data.length > 0) {
+        const branch = branchResult.data[0];
 
-        if (branchData.success && branchData.data && branchData.data.length > 0) {
-          const branch = branchData.data[0];
-
-          // localStorage에 저장 (CRM에서 사용)
-          if (typeof window !== 'undefined' && window.localStorage) {
-            window.localStorage.setItem('currentUser', JSON.stringify(userData));
-            window.localStorage.setItem('currentBranch', JSON.stringify(branch));
-          }
-
-          // 로그인 성공 알림
-          alert('로그인에 성공했습니다.');
-
-          // 로그인 상태 변경 이벤트 발생 (Header가 감지하여 UI 업데이트)
-          window.dispatchEvent(new CustomEvent('loginStatusChanged'));
-
-          // 랜딩 페이지로 돌아가기
-          onBack();
-        } else {
-          alert('지점 정보를 찾을 수 없습니다.');
+        // localStorage에 저장 (CRM에서 사용)
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem('currentUser', JSON.stringify(userData));
+          window.localStorage.setItem('currentBranch', JSON.stringify(branch));
         }
+
+        // 로그인 성공 알림
+        alert('로그인에 성공했습니다.');
+
+        // 로그인 상태 변경 이벤트 발생 (Header가 감지하여 UI 업데이트)
+        window.dispatchEvent(new CustomEvent('loginStatusChanged'));
+
+        // 랜딩 페이지로 돌아가기
+        onBack();
+      } else {
+        alert('지점 정보를 찾을 수 없습니다.');
       }
     } catch (error) {
       console.error('Branch fetch error:', error);

@@ -11,6 +11,7 @@ import {
 import { Button } from './ui/button';
 import { Minus, Plus, FileText } from 'lucide-react';
 import { SubscriptionTermsDialog } from './SubscriptionTermsDialog';
+import { supabase } from '../lib/supabase';
 
 interface PaymentDialogProps {
   isOpen: boolean;
@@ -91,29 +92,25 @@ export function PaymentDialog({ isOpen, onClose, planName, monthlyPrice }: Payme
           // redirectUrl로 이동하는 경우 response가 없을 수 있음
           // 실제 결제 완료는 웹훅이나 리다이렉트 페이지에서 처리해야 함
           
-          // 결제 완료 처리 (서버에 결제 정보 전송)
-          const apiUrl = import.meta.env.DEV
-            ? '/dynamic_api.php'
-            : 'https://autofms.mycafe24.com/dynamic_api.php';
-
+          // 결제 완료 처리 (Supabase에 결제 정보 저장)
           try {
-            await fetch(apiUrl, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-              },
-              body: JSON.stringify({
-                operation: 'payment_complete',
-                paymentId: paymentId,
-                planName: planName,
-                seatCount: seatCount,
+            const { error } = await supabase
+              .from('v2_portone_payments')
+              .insert({
+                payment_id: paymentId,
+                plan_name: planName,
+                seat_count: seatCount,
                 months: months,
-                totalAmount: totalAmount,
-                discountAmount: discountAmount,
-                baseAmount: baseAmount,
-              }),
-            });
+                total_amount: totalAmount,
+                discount_amount: discountAmount,
+                base_amount: baseAmount,
+                payment_status: 'completed',
+                created_at: new Date().toISOString(),
+              });
+
+            if (error) {
+              console.error('결제 정보 저장 오류:', error);
+            }
           } catch (error) {
             console.error('결제 정보 저장 오류:', error);
             // 결제는 성공했지만 정보 저장 실패 - 사용자에게 알림
